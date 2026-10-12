@@ -72,6 +72,11 @@ Dựa vào `idempotency.json`: số dòng trước và sau hai lần chạy lạ
 
 (trả lời ở đây)
 
+Thí nghiệm idempotency được thực hiện trên partition `trip-00003`, có 60 frame. Trước khi chạy lại, bảng Silver có 1.246 dòng và fingerprint `6c7480dfde7e`. Sau hai lần chạy lại cùng trip, bảng vẫn có 1.246 dòng và fingerprint không thay đổi, chứng minh thao tác có tính idempotent cả về số lượng lẫn nội dung dữ liệu.
+
+Ngược lại, khi mô phỏng cách ghi `append` sai, một trip có 60 frame trở thành 120 dòng sau hai lần ghi, tức dữ liệu bị nhân đôi (2x).
+
+Delta `overwrite` theo predicate `trip_id` thay thế dữ liệu thuộc partition cần xử lý và commit thay đổi theo cơ chế transaction. Cách này an toàn hơn việc xóa rồi ghi lại bằng hai thao tác riêng biệt: nếu quá trình bị lỗi giữa hai thao tác, dữ liệu có thể rơi vào trạng thái thiếu hoặc không nhất quán. Nhờ atomic commit và cơ chế versioning của Delta, pipeline hỗ trợ chạy lại từng trip mà không làm nhân đôi dữ liệu.
 ### Câu 5
 Khung hình **đen** và khung hình **tối** khác nhau thế nào, pipeline xử lý khác nhau ra sao, bạn có đồng ý không? Dựa vào `threshold.json`: nếu chọn ngưỡng 0, 2, 6 thì bao nhiêu khung bị coi là trùng ở mỗi drive? Bạn chọn ngưỡng nào, vì sao, và ngưỡng đó phụ thuộc vào tốc độ xe thế nào?
 
@@ -83,6 +88,21 @@ Khung hình **đen** và khung hình **tối** khác nhau thế nào, pipeline x
 
 (trả lời ở đây)
 
+Khung hình đen (`is_black`) là frame có độ sáng cực thấp, thường không chứa đủ thông tin thị giác hữu ích. Khung hình tối (`is_dark`) vẫn có thể chứa đặc trưng quan trọng của đường, xe và môi trường trong điều kiện ánh sáng yếu. Pipeline loại khung đen nhưng chỉ gắn cờ khung tối, cho phép giữ lại nếu frame không vi phạm các điều kiện chất lượng khác. Tôi đồng ý vì điều này giúp dataset phản ánh nhiều điều kiện ánh sáng thực tế.
+
+Ở Silver, drive A có 6 frame đen, 9 frame mờ, 4 frame tối và 149 frame gần trùng. Drive B có 4 frame đen, 0 frame mờ, 61 frame tối và 53 frame gần trùng.
+
+**Kết quả thí nghiệm dHash:**
+
+| Ngưỡng dHash | Drive A | Drive B |
+|---|---:|---:|
+| 0 | 61 | 8 |
+| 2 | 149 | 53 |
+| 6 | 363 | 244 |
+
+Tôi chọn ngưỡng **2**, trùng với cấu hình pipeline, vì đây là mức cân bằng giữa phát hiện frame gần giống và bảo toàn sự đa dạng thị giác. Ngưỡng 0 có thể bỏ sót frame gần trùng, trong khi ngưỡng 6 quá nhạy, có nguy cơ loại cả những frame chứa thay đổi cảnh vật có ý nghĩa.
+
+Ngưỡng dHash cũng liên quan đến tốc độ xe: xe đứng yên hoặc di chuyển chậm thường tạo ra nhiều frame liên tiếp giống nhau, còn khi xe chạy nhanh, nội dung giữa các frame thay đổi lớn hơn. Vì vậy, một ngưỡng cố định không nhất thiết tối ưu cho mọi tốc độ và điều kiện môi trường.
 ## Bước 4 · Gold
 
 ### Câu 6
