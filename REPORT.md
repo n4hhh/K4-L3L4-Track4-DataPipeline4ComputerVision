@@ -110,16 +110,37 @@ Dựa vào `leakage.json`: chia theo khung hình làm bao nhiêu trip bị chia 
 
 (trả lời ở đây)
 
+Theo kết quả `leakage.json`, dataset Gold có 1.019 frame hợp lệ thuộc 26 trip. Khi chia ngẫu nhiên theo từng frame với tỷ lệ 70/15/15, cả **26/26 trip** đều xuất hiện trong nhiều split, đồng thời cả 26 trip đều có frame ở cả train và test. Ngược lại, khi chia theo trip như pipeline hiện tại, số trip bị chia cắt là **0/26**.
+
+Việc chia theo frame gây data leakage vì các frame liên tiếp trong cùng chuyến đi thường có nội dung thị giác, điều kiện ánh sáng và bối cảnh rất giống nhau. Mô hình có thể ghi nhớ các đặc trưng đã xuất hiện trong train thay vì học cách tổng quát hóa sang cảnh mới. Điều này khiến metric trên test cao một cách giả tạo và không phản ánh đúng khả năng hoạt động trên các chuyến đi chưa từng thấy.
+
+Chia theo trip bảo đảm toàn bộ frame của một trip chỉ thuộc một split, tạo sự tách biệt hợp lý hơn giữa dữ liệu huấn luyện và kiểm thử. Tuy nhiên, các trip khác nhau vẫn có thể chứa cảnh tương tự, nên cách chia này chưa loại bỏ mọi dạng leakage có thể xảy ra.
 ### Câu 7
 Vì sao `dataset_version` là **băm nội dung** chứ không phải ngày giờ hay số đếm? Hai lần chạy liên tiếp cho kết quả gì? Vì sao `dataset_version` của bạn **khác** bạn bè dù cùng dữ liệu (liên hệ MSSV)?
 
 (trả lời ở đây)
 
+Dataset Gold của tôi có `dataset_version = a58541852303`, gồm **679 frame train, 154 frame validation và 186 frame test**, tổng cộng 1.019 frame thuộc 26 trip (18 train, 4 validation, 4 test).
+
+`dataset_version` được tính bằng SHA256 từ danh sách `frame_id` và split tương ứng, lấy 12 ký tự đầu của hash. Vì vậy, phiên bản phản ánh nội dung và cách phân chia dataset thay vì thời điểm chạy hay một số đếm tăng dần.
+
+Sau khi thực hiện `export-dataset` lần thứ hai, phiên bản vẫn là `a58541852303`, số frame và số trip trong từng split cũng không đổi, chứng minh tính ổn định khi cùng đầu vào được xử lý lại.
+
+Pipeline sử dụng MSSV `2A202602364` làm salt trong phép MD5 sắp xếp trip trước khi phân chia train/val/test. Vì vậy, những MSSV khác nhau có thể tạo ra cách phân chia và `dataset_version` khác nhau dù sử dụng cùng nguồn dữ liệu.
 ### Câu 8
 Đọc phần `lineage` trong `manifest.json` của dataset bạn. Trả lời "dataset này được tạo từ dữ liệu nào?" bằng chính nội dung đó. Nếu một người hỏi 3 tháng sau, thông tin nào giúp tái tạo lại đúng dataset này?
 
 (trả lời ở đây)
 
+Dataset Gold của tôi có phiên bản `a58541852303`, gồm 1.019 frame hợp lệ, được chia thành train (679), validation (154) và test (186). Theo `manifest.json`, dữ liệu được tạo từ các bảng và phiên bản sau:
+
+- **Bronze:** `raw_telemetry_a` v0, `raw_telemetry_b` v0, `trips_raw` v0 và `video_files` v1.
+- **Silver:** `frames` v27, `telemetry` v0, `frames_flagged` v0 và `frame_telemetry` v0.
+- **Video gốc:** SHA256 drive A là `636ba1a98dfc5ba665d1c935e1d2064e69f4df360ff9ffbd15795957d5e7e9aa`; drive B là `bfa62703f645ff77a8578ae3fc74a00881140d38a404d43c8e2af265bbee9fdc`.
+
+Pipeline loại các frame có `is_black`, `is_blurry`, `is_near_dup` hoặc không đạt `sync_ok`, sau đó chia dataset theo trip, phân tầng theo drive và sắp xếp bằng MD5 có sử dụng MSSV.
+
+Để truy vết hoặc tái tạo dataset sau ba tháng, cần lưu phiên bản dữ liệu nguồn, SHA256 video, cấu hình xử lý, mã pipeline, MSSV và quy tắc chia split. `manifest.json` cung cấp lineage và quy tắc lọc/split, giúp đối chiếu dữ liệu đầu ra với các nguồn đã sử dụng.
 ## Bước 5 · Điều phối và phục vụ
 
 ### Câu 9
