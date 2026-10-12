@@ -19,6 +19,8 @@
 ## Bước 1 · Bronze
 
 ### Câu 1
+(trả lời ở đây)
+
 Liệt kê **ít nhất 4 khác biệt** giữa telemetry nguồn A và nguồn B mà bạn thấy ở bronze. Vì sao pipeline giữ **mỗi nguồn một bảng bronze** và để mọi cột ở dạng chữ, thay vì gộp và ép kiểu ngay?
 
 
@@ -35,11 +37,34 @@ Pipeline đưa hai nguồn về một schema như thế nào (đơn vị, kiểu
 
 (trả lời ở đây)
 
+Pipeline chuẩn hóa telemetry A và B về cùng schema tại Silver. Nguồn B được đổi tên cột, chuyển tốc độ từ km/h sang m/s bằng cách chia 3,6, chuyển timestamp epoch milliseconds sang UTC và trừ clock offset 1.500 ms. Các giá trị `throttle_pct` và `brake_pct` cũng được chia 100 để đưa về tỷ lệ 0–1.
+
+Sau chuẩn hóa, thời điểm đầu tiên của drive B là `2025-10-08 14:30:00.009 UTC`, chỉ lệch 9 ms so với thời điểm bắt đầu video (`14:30:00`). Điều này chứng minh độ lệch đồng hồ đã được xử lý.
+
+**Kết quả quarantine thực nghiệm:**
+
+| Lý do | drive_a | drive_b |
+|---|---:|---:|
+| duplicate | 20 | 20 |
+| speed_missing | 30 | 30 |
+| speed_out_of_range | 3 | 3 |
+| **Tổng** | **53** | **53** |
+
+Sau xử lý, drive A còn 2.968 dòng sạch và drive B còn 3.181 dòng sạch. Tổng cộng 6.149 dòng hợp lệ và 106 dòng quarantine, khớp 6.255 dòng Bronze ban đầu.
+
+Dữ liệu lỗi được đưa vào `silver_telemetry_rejects` cùng `reject_reason` thay vì xóa, giúp kiểm toán, truy vết nguồn lỗi và cải thiện chất lượng dữ liệu mà không làm mất bằng chứng gốc.
 ### Câu 3
 Vì sao test `max_gap_ms` là `warn` còn `in_range` là `error`? Kết quả thí nghiệm `break-gate` của bạn (`break_gate.json`): test nào bắt được, bao nhiêu dòng, và điều đó cho biết gì về vai trò của "cổng chất lượng"?
 
 (trả lời ở đây)
 
+Test `max_gap_ms` được cấu hình `warn` vì khoảng trống dữ liệu telemetry do mất tín hiệu cảm biến có thể xảy ra trong thực tế. Pipeline cần cảnh báo để điều tra, nhưng không nhất thiết phải dừng toàn bộ quá trình xử lý. Ngược lại, `in_range` kiểm tra tốc độ trong khoảng 0–70 m/s và sử dụng severity `error`, vì tốc độ nằm ngoài miền hợp lệ có thể làm sai lệch các phân tích và dataset phía sau.
+
+Trong thí nghiệm `break-gate`, giới hạn làm sạch được nới từ 70 lên 1.000 m/s. Kết quả dbt test chuyển thành `PASS=5 WARN=1 ERROR=1 SKIP=0`. Test `in_range_silver_telemetry_speed_mps__70__0` phát hiện **6 dòng vi phạm**, khiến quality gate thất bại.
+
+Sau khi khôi phục giới hạn 70 m/s, kết quả trở về `PASS=6 WARN=1 ERROR=0 SKIP=0`.
+
+Thí nghiệm chứng minh quality gate là lớp kiểm tra độc lập với quy tắc làm sạch. Nếu bước làm sạch được cấu hình sai, test vẫn có thể phát hiện dữ liệu không hợp lệ. Test `error` ngăn dữ liệu xấu đi tiếp, còn `warn` cho phép pipeline tiếp tục nhưng vẫn ghi nhận vấn đề cần theo dõi.
 ## Bước 3 · Silver frames
 
 ### Câu 4
