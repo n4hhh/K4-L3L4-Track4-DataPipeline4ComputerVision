@@ -4,22 +4,21 @@
 
 | | |
 |---|---|
-| Họ và tên | `<điền>` |
-| MSSV (đúng bằng `LAB_STUDENT_ID` trong `.env`) | `<điền>` |
-| GitHub | `<điền: tên tài khoản>` |
-| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | `<điền: trip-xxxxx>` |
-
+| Họ và tên | Bùi Đức Thành |
+| MSSV (đúng bằng `LAB_STUDENT_ID` trong `.env`) | 2A202602364 |
+| GitHub | https://github.com/n4hhh/K4-L3L4-Track4-DataPipeline4ComputerVision |
+| Trip dùng cho bài tập sập và chạy lại (xem GUIDE, bước 5) | trip-04622 |
 ## Kết quả cuối
 
-- `dataset_version` của bạn: `<điền>`  (phải khớp `report/evidence/run_summary.json`)
-- Số khung hình train / val / test của bạn: `<điền>`
+- `dataset_version` của bạn: `a58541852303`
+- Số khung hình train / val / test của bạn: 679 / 154 / 186
 - `report/verify.txt`: tạo bằng `python3 scripts/check_submission.py --save-verify` (phải có `27/27 checks passed`).
 - Ảnh chụp trong `report/screenshots/`: `airflow_graph.png`, `minio_lake.png`, `metabase_dashboard.png`, và ảnh bài tập sập/chạy lại (log task đỏ thấy trip của bạn).
 
 ## Bước 1 · Bronze
 
 ### Câu 1
-(trả lời ở đây)
+
 
 Liệt kê **ít nhất 4 khác biệt** giữa telemetry nguồn A và nguồn B mà bạn thấy ở bronze. Vì sao pipeline giữ **mỗi nguồn một bảng bronze** và để mọi cột ở dạng chữ, thay vì gộp và ép kiểu ngay?
 
@@ -35,7 +34,7 @@ Thí nghiệm ingest cho thấy lần nạp lại trả về `already present`. 
 ### Câu 2
 Pipeline đưa hai nguồn về một schema như thế nào (đơn vị, kiểu thời gian, **độ lệch đồng hồ**)? Bằng chứng nào trong kết quả bước 2 cho thấy đã đúng? Dán bảng quarantine của bạn (số dòng theo từng lý do, từng drive) và giải thích vì sao dòng lỗi vào `rejects` thay vì bị xoá.
 
-(trả lời ở đây)
+
 
 Pipeline chuẩn hóa telemetry A và B về cùng schema tại Silver. Nguồn B được đổi tên cột, chuyển tốc độ từ km/h sang m/s bằng cách chia 3,6, chuyển timestamp epoch milliseconds sang UTC và trừ clock offset 1.500 ms. Các giá trị `throttle_pct` và `brake_pct` cũng được chia 100 để đưa về tỷ lệ 0–1.
 
@@ -56,7 +55,7 @@ Dữ liệu lỗi được đưa vào `silver_telemetry_rejects` cùng `reject_r
 ### Câu 3
 Vì sao test `max_gap_ms` là `warn` còn `in_range` là `error`? Kết quả thí nghiệm `break-gate` của bạn (`break_gate.json`): test nào bắt được, bao nhiêu dòng, và điều đó cho biết gì về vai trò của "cổng chất lượng"?
 
-(trả lời ở đây)
+
 
 Test `max_gap_ms` được cấu hình `warn` vì khoảng trống dữ liệu telemetry do mất tín hiệu cảm biến có thể xảy ra trong thực tế. Pipeline cần cảnh báo để điều tra, nhưng không nhất thiết phải dừng toàn bộ quá trình xử lý. Ngược lại, `in_range` kiểm tra tốc độ trong khoảng 0–70 m/s và sử dụng severity `error`, vì tốc độ nằm ngoài miền hợp lệ có thể làm sai lệch các phân tích và dataset phía sau.
 
@@ -70,7 +69,7 @@ Thí nghiệm chứng minh quality gate là lớp kiểm tra độc lập với 
 ### Câu 4
 Dựa vào `idempotency.json`: số dòng trước và sau hai lần chạy lại, và khi ghi kiểu `append`. Vì sao Delta `overwrite` theo partition (một trip) an toàn hơn xoá rồi ghi lại, nhất là khi giữa chừng có lỗi?
 
-(trả lời ở đây)
+
 
 Thí nghiệm idempotency được thực hiện trên partition `trip-00003`, có 60 frame. Trước khi chạy lại, bảng Silver có 1.246 dòng và fingerprint `6c7480dfde7e`. Sau hai lần chạy lại cùng trip, bảng vẫn có 1.246 dòng và fingerprint không thay đổi, chứng minh thao tác có tính idempotent cả về số lượng lẫn nội dung dữ liệu.
 
@@ -82,12 +81,9 @@ Khung hình **đen** và khung hình **tối** khác nhau thế nào, pipeline x
 
 | dHash khác tối đa | số khung trùng, drive A | số khung trùng, drive B |
 |---|---|---|
-| 0 | | |
-| 2 | | |
-| 6 | | |
-
-(trả lời ở đây)
-
+| 0 | 61 | 8 |
+| 2 | 149 | 53 |
+| 6 | 363 | 244 |
 Khung hình đen (`is_black`) là frame có độ sáng cực thấp, thường không chứa đủ thông tin thị giác hữu ích. Khung hình tối (`is_dark`) vẫn có thể chứa đặc trưng quan trọng của đường, xe và môi trường trong điều kiện ánh sáng yếu. Pipeline loại khung đen nhưng chỉ gắn cờ khung tối, cho phép giữ lại nếu frame không vi phạm các điều kiện chất lượng khác. Tôi đồng ý vì điều này giúp dataset phản ánh nhiều điều kiện ánh sáng thực tế.
 
 Ở Silver, drive A có 6 frame đen, 9 frame mờ, 4 frame tối và 149 frame gần trùng. Drive B có 4 frame đen, 0 frame mờ, 61 frame tối và 53 frame gần trùng.
@@ -108,7 +104,7 @@ Ngưỡng dHash cũng liên quan đến tốc độ xe: xe đứng yên hoặc d
 ### Câu 6
 Dựa vào `leakage.json`: chia theo khung hình làm bao nhiêu trip bị chia cắt, so với chia theo trip? Vì sao điều này làm điểm kiểm thử đẹp một cách giả tạo?
 
-(trả lời ở đây)
+
 
 Theo kết quả `leakage.json`, dataset Gold có 1.019 frame hợp lệ thuộc 26 trip. Khi chia ngẫu nhiên theo từng frame với tỷ lệ 70/15/15, cả **26/26 trip** đều xuất hiện trong nhiều split, đồng thời cả 26 trip đều có frame ở cả train và test. Ngược lại, khi chia theo trip như pipeline hiện tại, số trip bị chia cắt là **0/26**.
 
@@ -118,7 +114,7 @@ Chia theo trip bảo đảm toàn bộ frame của một trip chỉ thuộc mộ
 ### Câu 7
 Vì sao `dataset_version` là **băm nội dung** chứ không phải ngày giờ hay số đếm? Hai lần chạy liên tiếp cho kết quả gì? Vì sao `dataset_version` của bạn **khác** bạn bè dù cùng dữ liệu (liên hệ MSSV)?
 
-(trả lời ở đây)
+
 
 Dataset Gold của tôi có `dataset_version = a58541852303`, gồm **679 frame train, 154 frame validation và 186 frame test**, tổng cộng 1.019 frame thuộc 26 trip (18 train, 4 validation, 4 test).
 
@@ -130,7 +126,7 @@ Pipeline sử dụng MSSV `2A202602364` làm salt trong phép MD5 sắp xếp tr
 ### Câu 8
 Đọc phần `lineage` trong `manifest.json` của dataset bạn. Trả lời "dataset này được tạo từ dữ liệu nào?" bằng chính nội dung đó. Nếu một người hỏi 3 tháng sau, thông tin nào giúp tái tạo lại đúng dataset này?
 
-(trả lời ở đây)
+
 
 Dataset Gold của tôi có phiên bản `a58541852303`, gồm 1.019 frame hợp lệ, được chia thành train (679), validation (154) và test (186). Theo `manifest.json`, dữ liệu được tạo từ các bảng và phiên bản sau:
 
@@ -146,21 +142,41 @@ Pipeline loại các frame có `is_black`, `is_blurry`, `is_near_dup` hoặc kh�
 ### Câu 9
 Mô tả chính xác điều xảy ra khi trip của bạn sập rồi chạy lại: bao nhiêu task chuyển đỏ, bao nhiêu task `upstream_failed`, bạn clear gì, dữ liệu có nhân đôi không, `dataset_version` có đổi không? Bằng chứng (ảnh, số) là gì?
 
-(trả lời ở đây)
+Trong thử nghiệm Airflow, tôi cấu hình `LAB_FAIL_ONCE=trip-04622` rồi chạy lại DAG từ lake trống. Trong 26 mapped task Silver Frames, `silver_frames[12]` thất bại với thông báo `RuntimeError: simulated crash while extracting trip-04622`; 25 task còn lại thành công. Bảy task phụ thuộc phía sau chuyển sang `upstream_failed`.
+
+Tôi chỉ clear đúng mapped task có `map_index=12`, không clear cả nhóm 26 trip. Khi chạy lại, task này thành công và các task downstream tiếp tục cho đến khi toàn bộ DAG xanh.
+
+Sau recovery, lệnh verify đạt **27/27 checks passed**, Silver có 1.246 frame, Gold có 1.019 frame, `dataset_version` vẫn là `a58541852303` như trước khi crash. Đây là bằng chứng dữ liệu cuối không bị nhân đôi và dataset ổn định sau retry. Screenshot: `fail_task_log.png`, `airflow_graph.png`, `airflow_retry_graph.png`.
 
 ### Câu 10
 Nâng từ 2 drive lên **500 xe mỗi ngày**: ba thành phần nào của pipeline này sẽ vỡ đầu tiên, và bạn thay bằng gì (nối với slide 12, 22, 23)?
 
-(trả lời ở đây)
+Nếu nâng từ 2 drive lên **500 xe mỗi ngày**, tôi dự đoán ba điểm nghẽn chính:
+
+1. **Trích video FFmpeg và khả năng điều phối Airflow:** `silver_frames` đang giới hạn một mapped task chạy đồng thời trên mỗi DAG run. Số trip tăng khiến hàng đợi xử lý dài. Tôi đề xuất tách worker và tăng concurrency theo tài nguyên thực tế, có thể dùng CeleryExecutor hoặc KubernetesExecutor.
+2. **MinIO một node:** lượng video, frame và các request tăng làm áp lực dung lượng, băng thông và I/O lớn hơn. Có thể nâng sang MinIO distributed hoặc object storage như S3, kèm phân vùng lưu trữ và chính sách lifecycle.
+3. **DuckDB/dbt tập trung và tính toán lại toàn bảng:** truy vấn ETL trên lượng dữ liệu lớn dễ kéo dài. Tôi đề xuất mô hình incremental theo trip/ngày, xử lý theo partition và cân nhắc Spark/compute phân tán khi benchmark chứng minh cần thiết.
+
+Đây là các điểm nghẽn dự báo theo thiết kế hiện tại, chưa phải kết quả benchmark thực tế tại 500 xe/ngày.
 
 ## Câu hỏi riêng của bạn trên Metabase
 
-Câu SQL bạn thêm vào dashboard và điều nó cho biết:
+**Câu hỏi riêng:** Những trip nào có tỷ lệ frame bị loại cao nhất?
 
-(trả lời ở đây)
+Tôi tạo câu SQL trong Metabase dựa trên bảng `marts.mart_trip_summary`:
+
+    SELECT drive_id, trip_id, frames, frames_kept,
+           frames - frames_kept AS frames_dropped,
+           ROUND(100.0 * (frames - frames_kept) / NULLIF(frames, 0), 2) AS drop_rate_pct,
+           lighting, conditions, avg_speed_kmh
+    FROM marts.mart_trip_summary
+    ORDER BY drop_rate_pct DESC, trip_id
+    LIMIT 5;
+
+Kết quả: `trip-04622` loại 34/60 frame (56,67%), `trip-03904` 11/22 (50,00%), `trip-02086` 28/60 (46,67%), `trip-08888` 24/60 (40,00%) và `trip-07774` 13/34 (38,24%). Cả năm trip thuộc drive A, lighting Day và conditions Clouds. Tốc độ trung bình dao động 6,5–67,1 km/h, do đó không đủ cơ sở kết luận tốc độ cao là nguyên nhân chính. Cần phân tích thêm từng lý do loại: black, blurry, near-duplicate và sync loss.
 
 ## Nhìn lại
 
-Điều bạn thấy bất ngờ nhất, điều gì còn chưa rõ, và một lỗi dữ liệu mà bạn nghĩ pipeline **chưa** bắt được (nếu có). Tối đa 8 dòng.
+Điều bất ngờ nhất với tôi là cả 26 trip đều có frame xuất hiện đồng thời ở train và test khi chia ngẫu nhiên theo frame; cách chia theo trip loại được rò rỉ dạng này. Thí nghiệm task crash cũng thể hiện vai trò của idempotency khi chỉ chạy lại một partition mà kết quả Gold vẫn giữ nguyên.
 
-(trả lời ở đây)
+Khó khăn thực tế là shell script bị đổi LF thành CRLF khi làm việc trên Windows, và kết quả verify được PowerShell ghi ra UTF-16 thay vì UTF-8. Một hạn chế cần tìm hiểu thêm là dHash có thể bỏ sót ảnh gần trùng về ngữ nghĩa; pipeline cũng chưa chứng minh được các trip khác nhau không ghi lại những cảnh rất tương tự.
